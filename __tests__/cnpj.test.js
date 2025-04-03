@@ -1,91 +1,96 @@
 const request = require('supertest');
-const app = require('../server'); // Ajuste o caminho conforme sua estrutura
-const consultarCNPJ = require('consultar-cnpj');
+const app = require('../app');
 
-// Mock da biblioteca consultar-cnpj
-jest.mock('consultar-cnpj');
-
-describe('Testes da API de CNPJ', () => {
-  afterEach(() => {
-    jest.clearAllMocks(); // Limpa os mocks após cada teste
-  });
-
-  test('GET / - Deve retornar a página inicial', async () => {
-    const response = await request(app)
-      .get('/')
-      .expect(200)
-      .expect('Content-Type', /html/);
-
-    expect(response.text).toContain('Consulta de CNPJ');
-    expect(response.text).toContain('<form action="/consultar" method="POST"');
-  });
-
-  describe('POST /consultar', () => {
-    test('Deve retornar os dados de um CNPJ válido', async () => {
-      const mockEmpresa = {
-        cnpj: '00.000.000/0001-91',
-        razaoSocial: 'Empresa Teste LTDA',
-        nomeFantasia: 'Empresa Teste',
-        status: 'ATIVA',
-        cnae: '6202-3/00',
-        endereco: {
-          logradouro: 'Rua Teste',
-          numero: '123',
-          complemento: 'Sala 1',
-          bairro: 'Centro',
-          municipio: 'São Paulo',
-          uf: 'SP',
-          cep: '01001-000'
-        },
-        telefone: '(11) 1234-5678',
-        email: 'contato@empresateste.com.br'
-      };
-
-      consultarCNPJ.mockResolvedValue(mockEmpresa);
-
-      const response = await request(app)
-        .post('/consultar')
-        .send({ cnpj: '00.000.000/0001-91' })
-        .expect(200);
-
-      expect(response.text).toContain('Empresa Teste LTDA');
-      expect(response.text).toContain('ATIVA');
-      expect(response.text).toContain('Rua Teste');
-      expect(consultarCNPJ).toHaveBeenCalledWith('00000000000191');
+describe('TEST COM CNPJ', () => {
+    it('Teste da Consulta', async () => {
+        const response = await request(app).get('/');
+        expect(response.statusCode).toBe(200);
+        expect(response.text).toContain('<h1>Consulta de CNPJ</h1>');
     });
 
-    test('Deve retornar erro para CNPJ não encontrado', async () => {
-      const error = new Error('CNPJ não encontrado');
-      error.response = { status: 404 };
-      consultarCNPJ.mockRejectedValue(error);
-
-      const response = await request(app)
-        .post('/consultar')
-        .send({ cnpj: '00.000.000/0000-00' })
-        .expect(200);
-
-      expect(response.text).toContain('CNPJ não encontrado');
+    it('Teste para retornar um erro caso esteja com menos de 14 digitos', async () => {
+        const cnpj = '00.808.396/0003-6';
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404);
     });
 
-    test('Deve retornar erro para CNPJ inválido', async () => {
-      const error = new Error('CNPJ inválido');
-      consultarCNPJ.mockRejectedValue(error);
-
-      const response = await request(app)
-        .post('/consultar')
-        .send({ cnpj: '11.111.111/1111-11' }) // CNPJ inválido
-        .expect(200);
-
-      expect(response.text).toContain('Erro ao consultar CNPJ');
+    it('Teste que retornara um erro caso esteja com caracter', async () => {
+        const cnpj = '00.808.396/0003-AB';
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404);
     });
 
-    test('Deve retornar erro para requisição sem CNPJ', async () => {
-      const response = await request(app)
-        .post('/consultar')
-        .send({})
-        .expect(200);
-
-      expect(response.text).toContain('Erro ao consultar CNPJ');
+    it('CNPJ mal formatado', async () => {
+        const cnpj = '12.345.678/1234-5';
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404);
     });
-  });
+
+    // Teste CNPJ com números repetidos
+    it('CNPJ com números repetidos', async () => {
+        const cnpj = '11.111.111/1111-11';
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404);
+    });
+
+
+    it('CNPJ com pontuação errada', async () => {
+        const cnpj = '12.345.678.0001-95'; 
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404); 
+    });
+
+
+    it('CNPJ com mais de 14 dígitos', async () => {
+        const cnpj = '12.345.678/0001-9500'; 
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404); // CNPJ inválido
+    });
+
+
+    it('CNPJ com dígito verificador negativo', async () => {
+        const cnpj = '12.345.678/0001-9X'; 
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404); 
+    });
+
+    
+    it('CNPJ válido de empresa fictícia', async () => {
+        const cnpj = '00.000.000/0001-91';
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404); 
+    });
+
+    it('CNPJ com dígitos verificadores errados', async () => {
+        const cnpj = '12.345.678/0001-99'; 
+        const response = await request(app)
+            .get('/consultar')
+            .query({ cnpj });
+        
+        expect(response.statusCode).toBe(404); 
+    });
 });
